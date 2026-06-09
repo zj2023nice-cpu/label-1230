@@ -121,7 +121,16 @@
             </el-tab-pane>
             <el-tab-pane label="用户评价" name="reviews">
               <div class="reviews-content">
-                <el-empty description="暂无评价"></el-empty>
+                <ReviewForm
+                  v-if="product"
+                  :product-id="product.id"
+                  @submitted="handleReviewSubmitted"
+                />
+                <ReviewList
+                  v-if="product"
+                  ref="reviewList"
+                  :product-id="product.id"
+                />
               </div>
             </el-tab-pane>
           </el-tabs>
@@ -138,13 +147,17 @@
 <script>
 import Header from '@/components/common/Header.vue'
 import Footer from '@/components/common/Footer.vue'
+import ReviewForm from '@/components/business/ReviewForm.vue'
+import ReviewList from '@/components/business/ReviewList.vue'
 import { getProductDetail } from '@/api/product'
 
 export default {
   name: 'ProductDetail',
   components: {
     Header,
-    Footer
+    Footer,
+    ReviewForm,
+    ReviewList
   },
   data() {
     return {
@@ -204,6 +217,12 @@ export default {
         return (sales / 10000).toFixed(1) + '万'
       }
       return sales
+    },
+
+    handleReviewSubmitted() {
+      if (this.$refs.reviewList) {
+        this.$refs.reviewList.refresh()
+      }
     }
   }
 }

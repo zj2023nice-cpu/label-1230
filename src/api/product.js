@@ -49,3 +49,27 @@ export function getRecommendProducts() {
     method: 'get'
   })
 }
+
+export function getReviewList(params) {
+  return request({
+    url: '/product/reviews',
+    method: 'get',
+    params
+  })
+}
+
+export function submitReview(data) {
+  return request({
+    url: '/product/review',
+    method: 'post',
+    data
+  })
+}
+
+export function checkPurchase(productId) {
+  return request({
+    url: '/product/review/check',
+    method: 'get',
+    params: { productId }
+  })
+}

@@ -11,7 +11,7 @@
             <el-dropdown @command="handleCommand">
               <span class="user-info">
                 <i class="el-icon-user"></i>
-                {{ userInfo.nickname || userInfo.username }}
+                {{ (userInfo && userInfo.nickname) || (userInfo && userInfo.username) || '用户' }}
                 <i class="el-icon-arrow-down el-icon--right"></i>
               </span>
               <el-dropdown-menu slot="dropdown">
