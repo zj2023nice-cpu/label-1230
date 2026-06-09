@@ -121,7 +121,105 @@
             </el-tab-pane>
             <el-tab-pane label="用户评价" name="reviews">
               <div class="reviews-content">
-                <el-empty description="暂无评价"></el-empty>
+                <!-- 评分概览 -->
+                <div class="reviews-summary" v-if="reviewStats.total > 0">
+                  <div class="summary-score">
+                    <div class="score-num">{{ reviewStats.average }}</div>
+                    <el-rate
+                      :value="Number(reviewStats.average) || 0"
+                      disabled
+                      allow-half
+                      text-color="#ff9900"
+                    />
+                    <div class="score-total">共 {{ reviewStats.total }} 条评价</div>
+                  </div>
+                  <div class="summary-filter">
+                    <el-radio-group
+                      v-model="filterRating"
+                      size="small"
+                      @change="handleRatingChange"
+                    >
+                      <el-radio-button label="all">全部</el-radio-button>
+                      <el-radio-button
+                        v-for="star in [5, 4, 3, 2, 1]"
+                        :key="star"
+                        :label="star"
+                      >
+                        {{ star }}星 ({{ reviewStats.distribution[star] || 0 }})
+                      </el-radio-button>
+                    </el-radio-group>
+                  </div>
+                </div>
+
+                <!-- 写评价入口 -->
+                <div class="review-form-box">
+                  <div v-if="!isLogin" class="form-tip">
+                    <span>登录后可发表评价</span>
+                    <el-button type="text" @click="goLogin">去登录</el-button>
+                  </div>
+                  <div v-else-if="!purchased" class="form-tip">
+                    <i class="el-icon-info"></i>
+                    仅已购买该商品的用户可以发表评价
+                  </div>
+                  <el-form
+                    v-else
+                    ref="reviewForm"
+                    :model="reviewForm"
+                    :rules="reviewRules"
+                    label-width="80px"
+                    class="review-form"
+                  >
+                    <el-form-item label="评分" prop="rating">
+                      <el-rate v-model="reviewForm.rating" />
+                    </el-form-item>
+                    <el-form-item label="评价内容" prop="content">
+                      <el-input
+                        v-model="reviewForm.content"
+                        type="textarea"
+                        :rows="3"
+                        maxlength="300"
+                        show-word-limit
+                        placeholder="请分享您对该商品的使用感受"
+                      />
+                    </el-form-item>
+                    <el-form-item>
+                      <el-button
+                        type="primary"
+                        :loading="submitting"
+                        @click="handleSubmitReview"
+                      >
+                        提交评价
+                      </el-button>
+                    </el-form-item>
+                  </el-form>
+                </div>
+
+                <!-- 评价列表 -->
+                <div class="review-list" v-loading="reviewLoading">
+                  <el-empty
+                    v-if="!reviewLoading && reviewList.length === 0"
+                    description="暂无评价"
+                  ></el-empty>
+                  <div
+                    v-for="item in reviewList"
+                    :key="item.id"
+                    class="review-item"
+                  >
+                    <div class="review-user">
+                      <img class="avatar" :src="item.avatar" :alt="item.nickname" />
+                      <div class="user-info">
+                        <div class="nickname">{{ item.nickname }}</div>
+                        <el-rate
+                          :value="item.rating"
+                          disabled
+                          text-color="#ff9900"
+                        />
+                      </div>
+                      <div class="review-time">{{ item.createTime }}</div>
+                    </div>
+                    <div class="review-content">{{ item.content }}</div>
+                  </div>
+                </div>
               </div>
             </el-tab-pane>
           </el-tabs>
@@ -138,6 +236,7 @@
 <script>
 import Header from '@/components/common/Header.vue'
 import Footer from '@/components/common/Footer.vue'
+import { mapState } from 'vuex'
 import { getProductDetail } from '@/api/product'
 
 export default {
@@ -152,11 +251,72 @@ export default {
       currentImage: '',
       quantity: 1,
       activeTab: 'detail',
-      loading: false
+      loading: false,
+      filterRating: 'all',
+      reviewForm: {
+        rating: 5,
+        content: ''
+      },
+      reviewRules: {
+        rating: [
+          {
+            type: 'number',
+            required: true,
+            message: '请选择评分',
+            trigger: 'change',
+            validator: (rule, value, callback) => {
+              if (!value || value < 1) {
+                callback(new Error('请选择 1-5 星评分'))
+              } else {
+                callback()
+              }
+            }
+          }
+        ],
+        content: [
+          { required: true, message: '请填写评价内容', trigger: 'blur' },
+          { min: 5, message: '评价内容至少 5 个字符', trigger: 'blur' }
+        ]
+      }
+    }
+  },
+  computed: {
+    ...mapState('user', ['isLogin']),
+    reviewList() {
+      return this.$store.state.review.reviewList
+    },
+    reviewStats() {
+      return this.$store.state.review.reviewStats
+    },
+    reviewLoading() {
+      return this.$store.state.review.loading
+    },
+    submitting() {
+      return this.$store.state.review.submitting
+    },
+    purchased() {
+      return this.$store.state.review.purchased
+    },
+    productId() {
+      return parseInt(this.$route.params.id)
+    }
+  },
+  watch: {
+    activeTab(val) {
+      if (val === 'reviews') {
+        this.loadReviews()
+      }
+    },
+    '$route.params.id'() {
+      this.resetReviewState()
+      this.loadProductDetail()
     }
   },
   created() {
     this.loadProductDetail()
+  },
+  beforeDestroy() {
+    this.$store.commit('review/RESET')
   },
   methods: {
     async loadProductDetail() {
@@ -175,6 +335,68 @@ export default {
       } finally {
         this.loading = false
       }
+    },
+
+    resetReviewState() {
+      this.filterRating = 'all'
+      this.reviewForm = { rating: 5, content: '' }
+      this.$store.commit('review/RESET')
+    },
+
+    async loadReviews() {
+      if (!this.productId) return
+      this.$store.commit('review/SET_CURRENT_RATING', this.filterRating)
+      await this.$store.dispatch('review/fetchReviewList', {
+        productId: this.productId,
+        rating: this.filterRating
+      })
+      if (this.isLogin) {
+        this.$store.dispatch('review/checkPurchased', this.productId)
+      } else {
+        this.$store.commit('review/SET_PURCHASED', false)
+      }
+    },
+
+    handleRatingChange(rating) {
+      this.$store.dispatch('review/changeRating', {
+        productId: this.productId,
+        rating
+      })
+    },
+
+    goLogin() {
+      this.$router.push({
+        path: '/login',
+        query: { redirect: this.$route.fullPath }
+      })
+    },
+
+    handleSubmitReview() {
+      if (!this.isLogin) {
+        this.$message.warning('请先登录后再发表评价')
+        this.goLogin()
+        return
+      }
+
+      this.$refs.reviewForm.validate(async (valid) => {
+        if (!valid) return
+
+        try {
+          await this.$store.dispatch('review/submitReview', {
+            productId: this.productId,
+            rating: this.reviewForm.rating,
+            content: this.reviewForm.content
+          })
+          this.$message.success('评价提交成功')
+          this.reviewForm = { rating: 5, content: '' }
+          this.$refs.reviewForm.clearValidate()
+          // 提交后重置筛选为全部，便于看到自己的评价
+          this.filterRating = 'all'
+          this.$store.commit('review/SET_CURRENT_RATING', 'all')
+        } catch (e) {
+          // 错误提示已在 request 拦截器中处理
+        }
+      })
     },
     
     handleAddToCart() {
@@ -400,6 +622,105 @@ export default {
       line-height: 1.8;
       color: #666;
       margin-bottom: 15px;
+    }
+  }
+}
+
+.reviews-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 20px;
+  background: #fafafa;
+  border-radius: 4px;
+  margin-bottom: 20px;
+
+  .summary-score {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+
+    .score-num {
+      font-size: 28px;
+      font-weight: bold;
+      color: #ff9900;
+    }
+
+    .score-total {
+      font-size: 13px;
+      color: #999;
+    }
+  }
+}
+
+.review-form-box {
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  margin-bottom: 20px;
+
+  .form-tip {
+    color: #909399;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .el-icon-info {
+      color: #e6a23c;
+    }
+  }
+}
+
+.review-list {
+  min-height: 120px;
+
+  .review-item {
+    padding: 16px 0;
+    border-bottom: 1px solid #ebeef5;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .review-user {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        margin-right: 12px;
+        object-fit: cover;
+        background: #f5f5f5;
+      }
+
+      .user-info {
+        flex: 1;
+
+        .nickname {
+          font-size: 14px;
+          color: #333;
+          margin-bottom: 4px;
+        }
+      }
+
+      .review-time {
+        font-size: 12px;
+        color: #999;
+      }
+    }
+
+    .review-content {
+      color: #333;
+      line-height: 1.7;
+      padding-left: 52px;
     }
   }
 }
