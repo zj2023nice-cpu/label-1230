@@ -2,6 +2,7 @@ import Mock from 'mockjs'
 import './product'
 import './user'
 import './order'
+import './review'
 
 // 配置Mock
 Mock.setup({

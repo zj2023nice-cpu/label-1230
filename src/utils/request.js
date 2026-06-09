@@ -43,7 +43,9 @@ service.interceptors.response.use(
         window.location.href = '/login'
       }
       
-      return Promise.reject(new Error(res.message || 'Error'))
+      const error = new Error(res.message || 'Error')
+      error.code = res.code
+      return Promise.reject(error)
     } else {
       return res
     }
