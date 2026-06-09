@@ -1,4 +1,5 @@
 import Mock from 'mockjs'
+import orderMock from './order'
 
 const Random = Mock.Random
 
@@ -252,6 +253,132 @@ Mock.mock(/\/api\/product\/search/, 'get', (options) => {
     code: 200,
     message: 'success',
     data: results
+  }
+})
+
+const reviewContents = [
+  '商品质量很好，物流也很快，非常满意！',
+  '性价比很高，值得购买，推荐给朋友们。',
+  '包装很精美，做工也不错，整体满意。',
+  '用了一段时间了，效果不错，好评！',
+  '第二次购买了，一如既往的好，信赖这个品牌。',
+  '外观漂亮，功能齐全，操作简单，很满意。',
+  '价格实惠，质量过关，物流速度也很快。',
+  '总体还不错，有一些小瑕疵但不影响使用。',
+  '收到了，和描述一致，给个好评。',
+  '非常棒，超出预期，强烈推荐！',
+  '一般般吧，没有想象中那么好，但也不差。',
+  '客服态度很好，有问题及时解决了。'
+]
+
+const reviewNicknames = [
+  '阳光少年', '快乐购物者', '品质达人', '精明买家',
+  '生活家', '数码控', '时尚达人', '美食家',
+  '居家能手', '运动爱好者', '阅读者', '科技迷'
+]
+
+let reviewStore = {}
+
+function generateReviewsForProduct(productId) {
+  if (reviewStore[productId]) {
+    return reviewStore[productId]
+  }
+
+  const count = Math.floor(Math.abs(Math.sin(productId * 151) * 15) + 3)
+  const reviews = []
+
+  for (let i = 0; i < count; i++) {
+    const seed = productId * 1000 + i
+    const rating = Math.ceil(Math.abs(Math.sin(seed * 157) * 5))
+    const clampedRating = Math.min(5, Math.max(1, rating))
+    const dayOffset = Math.floor(Math.abs(Math.sin(seed * 163) * 180)) + 1
+    const date = new Date(Date.now() - dayOffset * 86400000)
+    const timeStr = date.getFullYear() + '-' +
+      String(date.getMonth() + 1).padStart(2, '0') + '-' +
+      String(date.getDate()).padStart(2, '0') + ' ' +
+      String(Math.floor(Math.abs(Math.sin(seed * 167) * 24))).padStart(2, '0') + ':' +
+      String(Math.floor(Math.abs(Math.sin(seed * 173) * 60))).padStart(2, '0') + ':' +
+      String(Math.floor(Math.abs(Math.sin(seed * 179) * 60))).padStart(2, '0')
+
+    reviews.push({
+      id: seed,
+      productId: productId,
+      userId: Math.floor(Math.abs(Math.sin(seed * 181) * 100)) + 1,
+      nickname: reviewNicknames[seed % reviewNicknames.length],
+      avatar: `https://i.pravatar.cc/40?img=${(seed % 70) + 1}`,
+      rating: clampedRating,
+      content: reviewContents[seed % reviewContents.length],
+      createTime: timeStr
+    })
+  }
+
+  reviews.sort((a, b) => new Date(b.createTime) - new Date(a.createTime))
+  reviewStore[productId] = reviews
+  return reviews
+}
+
+Mock.mock(/\/api\/product\/reviews/, 'get', (options) => {
+  const { productId, rating, page = 1, pageSize = 10 } = parseQuery(options.url)
+  const pid = parseInt(productId)
+  let allReviews = generateReviewsForProduct(pid)
+
+  if (rating && parseInt(rating) > 0) {
+    allReviews = allReviews.filter(r => r.rating === parseInt(rating))
+  }
+
+  const start = (parseInt(page) - 1) * parseInt(pageSize)
+  const end = start + parseInt(pageSize)
+
+  return {
+    code: 200,
+    message: 'success',
+    data: {
+      list: allReviews.slice(start, end),
+      total: allReviews.length,
+      page: parseInt(page),
+      pageSize: parseInt(pageSize)
+    }
+  }
+})
+
+Mock.mock('/api/product/review', 'post', (options) => {
+  const data = JSON.parse(options.body)
+  const newReview = {
+    id: Date.now(),
+    productId: data.productId,
+    userId: data.userId || 1,
+    nickname: data.nickname || '匿名用户',
+    avatar: data.avatar || `https://i.pravatar.cc/40?img=1`,
+    rating: data.rating,
+    content: data.content,
+    createTime: new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
+  }
+
+  if (!reviewStore[data.productId]) {
+    reviewStore[data.productId] = []
+  }
+  reviewStore[data.productId].unshift(newReview)
+
+  return {
+    code: 200,
+    message: '评价提交成功',
+    data: newReview
+  }
+})
+
+Mock.mock(/\/api\/product\/review\/check/, 'get', (options) => {
+  const { productId } = parseQuery(options.url)
+  const pid = parseInt(productId)
+  const orders = orderMock.orders || []
+  const purchased = orders.some(order =>
+    order.status === 'completed' &&
+    order.products.some(p => p.productId === pid)
+  )
+
+  return {
+    code: 200,
+    message: 'success',
+    data: { purchased }
   }
 })
 
