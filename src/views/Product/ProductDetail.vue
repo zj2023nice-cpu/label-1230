@@ -121,7 +121,7 @@
             </el-tab-pane>
             <el-tab-pane label="用户评价" name="reviews">
               <div class="reviews-content">
-                <el-empty description="暂无评价"></el-empty>
+                <ProductReviews :product-id="Number($route.params.id)" v-if="product" />
               </div>
             </el-tab-pane>
           </el-tabs>
@@ -138,13 +138,15 @@
 <script>
 import Header from '@/components/common/Header.vue'
 import Footer from '@/components/common/Footer.vue'
+import ProductReviews from '@/components/business/ProductReviews.vue'
 import { getProductDetail } from '@/api/product'
 
 export default {
   name: 'ProductDetail',
   components: {
     Header,
-    Footer
+    Footer,
+    ProductReviews
   },
   data() {
     return {
